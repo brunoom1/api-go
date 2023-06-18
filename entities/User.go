@@ -11,6 +11,7 @@ type UserType string
 const (
 	USER_TYPE_CONSULTANT    UserType = "consultant"
 	USER_TYPE_ADMINISTRATOR UserType = "administrator"
+	USER_TYPE_APPLICATION   UserType = "application"
 )
 
 type User struct {
@@ -21,4 +22,12 @@ type User struct {
 	UserType     UserType
 	Password     string
 	ActivatedAt  time.Time
+}
+
+func (u User) GetTypes() []UserType {
+	return []UserType{
+		USER_TYPE_ADMINISTRATOR,
+		USER_TYPE_APPLICATION,
+		USER_TYPE_CONSULTANT,
+	}
 }

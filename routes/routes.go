@@ -11,12 +11,13 @@ func InitRoutes(app *gin.Engine) {
 	routeSecurity := app.Group("")
 	routeSecurity.Use(middlewares.CheckToken())
 
-	routeSecurity.GET("/users", controllers.UsersList)
-	routeSecurity.GET("/users/types", controllers.UsersTypes)
-	routeSecurity.POST("/users", controllers.UsersCreate)
-	routeSecurity.GET("/users/me", controllers.UserMe)
+	var userController controllers.UserController
+	routeSecurity.GET("/users", userController.List)
+	routeSecurity.GET("/users/types", userController.UserTypes)
+	routeSecurity.POST("/users", userController.Create)
+	routeSecurity.GET("/users/me", userController.Me)
 
 	routesPublics := app.Group("")
-	routesPublics.POST("/users/auth/login", controllers.UsersAuthLogin)
+	routesPublics.POST("/users/auth/login", userController.Login)
 
 }

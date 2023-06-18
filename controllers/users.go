@@ -2,26 +2,26 @@ package controllers
 
 import (
 	"net/http"
-	"time"
 
-	"github.com/GA-Marketing/service-viability/db"
 	"github.com/GA-Marketing/service-viability/entities"
 	"github.com/GA-Marketing/service-viability/helpers"
+	"github.com/GA-Marketing/service-viability/repository"
+	"github.com/GA-Marketing/service-viability/services"
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 )
 
-type User struct {
-	entities.User
-	Password string `gorm:"->:false"`
-}
+type UserController struct{}
 
-func UsersList(c *gin.Context) {
-	var users []User
-	db := db.GetCurrentConnection()
-	db.Find(&users)
+func (uc UserController) List(c *gin.Context) {
+	var userRepository repository.UsersRepository
+	users, err := userRepository.Find()
 
-	c.JSON(200, users)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, users)
 }
 
 type userInput struct {
@@ -32,19 +32,10 @@ type userInput struct {
 	UserType     string
 }
 
-func UsersCreate(c *gin.Context) {
-	db := db.GetCurrentConnection()
+func (uc UserController) Create(c *gin.Context) {
 
 	var userInput userInput
 	error := c.ShouldBindJSON(&userInput)
-
-	user := entities.User{
-		Name:         userInput.Name,
-		Email:        userInput.Email,
-		MemberNumber: userInput.MemberNumber,
-		UserType:     entities.UserType(userInput.UserType),
-		Password:     string(helpers.Encrypt(userInput.Password)),
-	}
 
 	if error != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -54,30 +45,34 @@ func UsersCreate(c *gin.Context) {
 		return
 	}
 
-	if user.UserType == "" {
-		user.UserType = entities.USER_TYPE_ADMINISTRATOR
+	user := entities.User{
+		Name:         userInput.Name,
+		Email:        userInput.Email,
+		MemberNumber: userInput.MemberNumber,
+		UserType:     entities.UserType(userInput.UserType),
+		Password:     string(helpers.Encrypt(userInput.Password)),
 	}
 
-	result := db.Create(&user)
+	var userRepository repository.UsersRepository
+	newUser, error := userRepository.Create(&user)
 
-	if result.Error != nil {
+	if error != nil {
 		c.JSON(http.StatusConflict, gin.H{
 			"message": "Not is possible add new user with this data",
-			"error":   result.Error,
+			"error":   error.Error(),
 		})
 		return
 	}
 
-	c.JSON(201, user)
+	c.JSON(201, newUser)
 }
 
-func UsersTypes(c *gin.Context) {
+func (uc UserController) UserTypes(c *gin.Context) {
+
+	var userRepository repository.UsersRepository
 
 	c.JSON(200, gin.H{
-		"types": []string{
-			string(entities.USER_TYPE_ADMINISTRATOR),
-			string(entities.USER_TYPE_CONSULTANT),
-		},
+		"types": userRepository.FindTypes(),
 	})
 }
 
@@ -86,7 +81,7 @@ type inputLogin struct {
 	Password string
 }
 
-func UsersAuthLogin(c *gin.Context) {
+func (uc UserController) Login(c *gin.Context) {
 
 	var inputLoginData inputLogin
 	err := c.BindJSON(&inputLoginData)
@@ -99,53 +94,22 @@ func UsersAuthLogin(c *gin.Context) {
 		return
 	}
 
-	db := db.GetCurrentConnection()
-
-	user := entities.User{Email: inputLoginData.Email}
-	result := db.First(&user)
-
-	if result.Error != nil {
-		c.JSON(400, gin.H{
-			"message": "User is not found",
-		})
-
-		return
-	}
-
-	if !helpers.EncryptVerify(inputLoginData.Password, user.Password) {
-		c.JSON(http.StatusNotAcceptable, gin.H{
-			"message": "Email or password is invalid",
-		})
-		return
-	}
-
-	key := helpers.GetSecurityKey()
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
-		jwt.MapClaims{
-			"exp": time.Now().Unix() + 3600,
-			"iss": "https://gamarketing.com",
-			"sub": "auth",
-			"uid": user.ID,
-		})
-	tokenString, err := token.SignedString([]byte(key))
+	var loginService services.LoginService
+	token, err := loginService.Login(inputLoginData.Email, inputLoginData.Password)
 
 	if err != nil {
-		c.JSON(500, gin.H{
+		c.JSON(http.StatusBadRequest, gin.H{
 			"message": err.Error(),
 		})
 		return
 	}
 
-	user.Password = ""
-
 	c.JSON(200, gin.H{
-		"user":  user,
-		"token": tokenString,
+		"token": token,
 	})
 }
 
-func UserMe(c *gin.Context) {
+func (uc UserController) Me(c *gin.Context) {
 	user := c.MustGet("loggedUser").(entities.User)
 	c.JSON(200, user)
 }
